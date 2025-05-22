@@ -7,10 +7,11 @@ use h3::{
 };
 use pin_project_lite::pin_project;
 use tokio::io::ReadBuf;
+use h3::quic::SendStream as _;
 
 pin_project! {
     /// WebTransport receive stream
-    pub struct RecvStream<S,B> {
+    pub struct RecvStream<S, B> {
         #[pin]
         stream: BufRecvStream<S, B>,
     }
@@ -148,7 +149,9 @@ where
 
 impl<S, B> futures_util::io::AsyncWrite for SendStream<S, B>
 where
-    BufRecvStream<S, B>: futures_util::io::AsyncWrite,
+    B: Buf,
+    S: quic::SendStream<B>,
+    BufRecvStream<S, B>: futures_util::io::AsyncWrite + quic::SendStream<B>,
 {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
@@ -171,14 +174,28 @@ where
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let p = self.project();
+        let mut p = self.project();
+
+        match p.stream.poll_finish(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => {
+                return Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            }
+            Poll::Pending => return Poll::Pending,
+        }
+
         p.stream.poll_close(cx)
     }
 }
 
 impl<S, B> tokio::io::AsyncWrite for SendStream<S, B>
 where
-    BufRecvStream<S, B>: tokio::io::AsyncWrite,
+    B: Buf,
+    S: quic::SendStream<B>,
+    BufRecvStream<S, B>: tokio::io::AsyncWrite + quic::SendStream<B>,
 {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
@@ -201,7 +218,19 @@ where
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let p = self.project();
+        let mut p = self.project();
+
+        match p.stream.poll_finish(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => {
+                return Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            }
+            Poll::Pending => return Poll::Pending,
+        }
+
         p.stream.poll_shutdown(cx)
     }
 }
@@ -297,7 +326,6 @@ where
     B: Buf,
 {
     type SendStream = SendStream<S::SendStream, B>;
-
     type RecvStream = RecvStream<S::RecvStream, B>;
 
     fn split(self) -> (Self::SendStream, Self::RecvStream) {
@@ -322,7 +350,9 @@ where
 
 impl<S, B> futures_util::io::AsyncWrite for BidiStream<S, B>
 where
-    BufRecvStream<S, B>: futures_util::io::AsyncWrite,
+    B: Buf,
+    S: quic::SendStream<B>,
+    BufRecvStream<S, B>: futures_util::io::AsyncWrite + quic::SendStream<B>,
 {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
@@ -345,7 +375,17 @@ where
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let p = self.project();
+        let mut p = self.project();
+        match p.stream.poll_finish(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => {
+                return Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            }
+            Poll::Pending => return Poll::Pending,
+        }
         p.stream.poll_close(cx)
     }
 }
@@ -366,7 +406,9 @@ where
 
 impl<S, B> tokio::io::AsyncWrite for BidiStream<S, B>
 where
-    BufRecvStream<S, B>: tokio::io::AsyncWrite,
+    B: Buf,
+    S: quic::SendStream<B>,
+    BufRecvStream<S, B>: tokio::io::AsyncWrite + quic::SendStream<B>,
 {
     fn poll_write(
         self: std::pin::Pin<&mut Self>,
@@ -389,7 +431,17 @@ where
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let p = self.project();
+        let mut p = self.project();
+        match p.stream.poll_finish(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(e)) => {
+                return Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            }
+            Poll::Pending => return Poll::Pending,
+        }
         p.stream.poll_shutdown(cx)
     }
 }
